@@ -6120,6 +6120,8 @@ let sheetsTokenClient = null;
 let sheetsAccessToken = null;
 let isSyncing = false;
 
+let sheetsTokenCallback = null;
+
 function initSheetsClient() {
   if (!window.google || !window.google.accounts) return;
   sheetsTokenClient = google.accounts.oauth2.initTokenClient({
@@ -6128,7 +6130,7 @@ function initSheetsClient() {
     callback: async (resp) => {
       if (resp.error) { showToast('Sheets login ไม่สำเร็จ: ' + resp.error); return; }
       sheetsAccessToken = resp.access_token;
-      await performSheetsSync();
+      if (sheetsTokenCallback) { await sheetsTokenCallback(); sheetsTokenCallback = null; }
     }
   });
 }
@@ -6290,6 +6292,7 @@ async function syncToSheets() {
     if (sheetsAccessToken) {
       await performSheetsSync();
     } else {
+      sheetsTokenCallback = performSheetsSync;
       sheetsTokenClient.requestAccessToken({ prompt: '' });
     }
   } catch(e) {
@@ -6357,9 +6360,14 @@ async function ensureSheetsExist() {
 async function syncFromSheets() {
   if (!sheetsTokenClient) initSheetsClient();
   if (!sheetsAccessToken) {
+    sheetsTokenCallback = performPull;
     sheetsTokenClient.requestAccessToken({ prompt: '' });
     return;
   }
+  await performPull();
+}
+
+async function performPull() {
   try {
     showToast('⏳ กำลังดึงข้อมูลจาก Sheets...', 'info');
     const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?ranges=Patients!A1:Z10000&ranges=Visits!A1:Z10000`, {
