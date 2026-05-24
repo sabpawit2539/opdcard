@@ -6180,10 +6180,11 @@ async function syncPhotos() {
 
     let uploaded = 0;
     for (const photo of photos) {
-      const fileName = `${photo.id}.jpg`;
+      if (!photo.id || !photo.dataUrl) continue; // ข้ามรูปที่ข้อมูลไม่ครบ
+      const fileName = `${photo.id}__${photo.visitId||''}__${photo.patientId||''}__${photo.photoType||''}__${photo.sortOrder||0}.jpg`;
       if (existingFiles.has(fileName)) continue; // ไม่อัพซ้ำ
       // แปลง base64 เป็น blob
-      const base64 = photo.data.replace(/^data:image\/\w+;base64,/, '');
+      const base64 = photo.dataUrl.replace(/^data:image\/\w+;base64,/, '');
       const byteChars = atob(base64);
       const byteArr = new Uint8Array(byteChars.length);
       for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
@@ -6221,7 +6222,14 @@ async function pullPhotos() {
     // เช็คว่ารูปไหนยังไม่มีใน IndexedDB
     let pulled = 0;
     for (const file of driveFiles) {
-      const photoId = file.name.replace('.jpg', '');
+      // parse ชื่อไฟล์: id__visitId__patientId__photoType__sortOrder.jpg
+      const parts = file.name.replace('.jpg', '').split('__');
+      const photoId = parts[0];
+      const visitId = parts[1] || '';
+      const patientId = parts[2] || '';
+      const photoType = parts[3] || '';
+      const sortOrder = parseInt(parts[4] || '0');
+
       const existing = await new Promise(resolve => {
         const tx = db.transaction('photos', 'readonly');
         const req = tx.objectStore('photos').get(photoId);
@@ -6241,7 +6249,7 @@ async function pullPhotos() {
         reader.onload = () => resolve(reader.result);
         reader.readAsDataURL(blob);
       });
-      await dbPut('photos', { id: photoId, data: base64 });
+      await dbPut('photos', { id: photoId, visitId, patientId, photoType, sortOrder, dataUrl: base64 });
       pulled++;
     }
     showToast(`📸 ดึงรูปสำเร็จ: ${pulled} รูปใหม่`, 'ok');
