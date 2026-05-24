@@ -6303,13 +6303,13 @@ async function performSheetsSync() {
     showToast('⏳ กำลัง sync ข้อมูล...', 'info');
     const patients = await dbGetAll('patients');
     const visits = await dbGetAll('visits');
-    const patientRows = [['id','hn','name','dob','gender','phone','allergy','createdAt']];
+    const patientRows = [['id','hn','name','dob','gender','phone','allergy','createdAt','_json']];
     patients.forEach(p => {
-      patientRows.push([p.id||'',p.hn||'',p.name||'',p.dob||'',p.gender||'',p.phone||'',p.allergy||'',p.createdAt||'']);
+      patientRows.push([p.id||'',p.hn||'',p.name||'',p.dob||'',p.gender||'',p.phone||'',p.allergy||'',p.createdAt||'',JSON.stringify(p)]);
     });
-    const visitRows = [['id','patientId','date','type','visitType','note','complication','complicationStatus','updatedAt']];
+    const visitRows = [['id','patientId','date','type','_json']];
     visits.forEach(v => {
-      visitRows.push([v.id||'',v.patientId||'',v.date||'',v.type||'',v.visitType||'',v.note||'',v.complication||'',v.complicationStatus||'',v.updatedAt||'']);
+      visitRows.push([v.id||'',v.patientId||'',v.date||'',v.type||'',JSON.stringify(v)]);
     });
     await ensureSheetsExist();
     const batchBody = {
@@ -6369,8 +6369,14 @@ async function syncFromSheets() {
     const pRows = (pRange?.values || []).slice(1);
     const vRows = (vRange?.values || []).slice(1);
     if (pRows.length === 0 && vRows.length === 0) { showToast('ไม่มีข้อมูลใน Sheets'); return; }
-    const patients = pRows.map(r => ({ id:r[0]||'',hn:r[1]||'',name:r[2]||'',dob:r[3]||'',gender:r[4]||'',phone:r[5]||'',allergy:r[6]||'',createdAt:r[7]||'' })).filter(p=>p.id);
-    const visits = vRows.map(r => ({ id:r[0]||'',patientId:r[1]||'',date:r[2]||'',type:r[3]||'',visitType:r[4]||'',note:r[5]||'',complication:r[6]||'',complicationStatus:r[7]||'',updatedAt:r[8]||'' })).filter(v=>v.id);
+    const patients = pRows.map(r => {
+      try { return r[8] ? JSON.parse(r[8]) : { id:r[0]||'',hn:r[1]||'',name:r[2]||'',dob:r[3]||'',gender:r[4]||'',phone:r[5]||'',allergy:r[6]||'',createdAt:r[7]||'' }; }
+      catch(e) { return { id:r[0]||'',hn:r[1]||'',name:r[2]||'',dob:r[3]||'',gender:r[4]||'',phone:r[5]||'',allergy:r[6]||'',createdAt:r[7]||'' }; }
+    }).filter(p=>p.id);
+    const visits = vRows.map(r => {
+      try { return r[4] ? JSON.parse(r[4]) : { id:r[0]||'',patientId:r[1]||'',date:r[2]||'',type:r[3]||'' }; }
+      catch(e) { return { id:r[0]||'',patientId:r[1]||'',date:r[2]||'',type:r[3]||'' }; }
+    }).filter(v=>v.id);
     for (const p of patients) await dbPut('patients', p);
     for (const v of visits) await dbPut('visits', v);
     showToast(`✅ ดึงข้อมูลสำเร็จ: ${patients.length} ผู้ป่วย กำลังดึงรูป...`, 'ok');
