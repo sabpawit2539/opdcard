@@ -320,6 +320,8 @@ textarea.fctl{resize:vertical;min-height:80px;}
     <button class="btn btn-outline btn-sm" onclick="exportData()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="Backup ข้อมูล">💾 Export</button>
     <label class="btn btn-outline btn-sm" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;cursor:pointer;" title="นำข้อมูลกลับเข้า">📂 Import<input type="file" accept=".json" style="display:none;" onchange="importData(this)"></label>
     <button id="driveBtn" class="btn btn-outline btn-sm" onclick="backupToDrive()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="Backup ไป Google Drive">☁️ Drive</button>
+    <button class="btn btn-outline btn-sm" onclick="syncToSheets()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="Sync ไป Google Sheets">🔄 Sync</button>
+    <button class="btn btn-outline btn-sm" onclick="syncFromSheets()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="ดึงข้อมูลจาก Google Sheets">⬇️ Pull</button>
     <button class="btn btn-success btn-sm" onclick="openAddPatient()">+ เพิ่มผู้ป่วย</button>
   </div>
 </nav>
@@ -2749,6 +2751,7 @@ async function _finalizeSavePatient(obj) {
   _editPatientLoadedUpdatedAt = obj.updatedAt; // N7: sync snapshot after save
   closePatientModal();
   showToast('บันทึกข้อมูลผู้ป่วยแล้ว','ok');
+  syncToSheets();
   if (document.getElementById('pageHome').classList.contains('active')) {
     loadHomePatients();
   } else {
@@ -3202,6 +3205,7 @@ async function _finalizeSaveVisit(obj, patientId) {
   const id = obj.id;
   await dbPut('visits', obj);
   _editVisitLoadedUpdatedAt = obj.updatedAt; // N7: sync snapshot after save
+  syncToSheets();
 
   // Save photos — M4: skip bad files instead of hanging
   const baseOrder = Date.now();
@@ -5988,21 +5992,173 @@ async function exportPatientPDF(patientId) {
 //   6. Copy Client ID มาใส่ด้านล่าง
 
 const DRIVE_CLIENT_ID = '84808049282-3v6hbl15dbca3c21hmp1b4dcsb2m95ue.apps.googleusercontent.com';
+const SHEET_ID = '1FsqGLYQz5Dce8I7Q2dShgijMD-pRldMO7wlbcrX1O1M';
 
 let driveTokenClient = null;
 let driveAccessToken = null;
+let sheetsTokenClient = null;
+let sheetsAccessToken = null;
+let isSyncing = false;
 
 function initDriveClient() {
   if (!window.google || !window.google.accounts) return;
   driveTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: DRIVE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/drive.file',
+    scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets',
     callback: async (resp) => {
       if (resp.error) { showToast('Login ไม่สำเร็จ: ' + resp.error); return; }
       driveAccessToken = resp.access_token;
       await performDriveUpload();
     }
   });
+}
+
+// ─── GOOGLE SHEETS SYNC ───────────────────────────────────────────
+function initSheetsClient() {
+  if (!window.google || !window.google.accounts) return;
+  sheetsTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: DRIVE_CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    callback: async (resp) => {
+      if (resp.error) { showToast('Sheets login ไม่สำเร็จ: ' + resp.error); return; }
+      sheetsAccessToken = resp.access_token;
+      await performSheetsSync();
+    }
+  });
+}
+
+async function syncToSheets() {
+  if (isSyncing) return;
+  if (!SHEET_ID) return;
+  if (!window.google || !window.google.accounts) return;
+  if (!sheetsTokenClient) initSheetsClient();
+  isSyncing = true;
+  try {
+    if (sheetsAccessToken) {
+      await performSheetsSync();
+    } else {
+      sheetsTokenClient.requestAccessToken({ prompt: '' });
+    }
+  } catch(e) {
+    console.warn('Sheets sync error', e);
+    isSyncing = false;
+  }
+}
+
+async function performSheetsSync() {
+  try {
+    showToast('กำลัง sync ข้อมูล...', 'info');
+    const patients = await dbGetAll('patients');
+    const visits = await dbGetAll('visits');
+
+    // Prepare patients sheet data
+    const patientRows = [['id','hn','name','dob','gender','phone','allergy','createdAt']];
+    patients.forEach(p => {
+      patientRows.push([p.id||'', p.hn||'', p.name||'', p.dob||'', p.gender||'', p.phone||'', p.allergy||'', p.createdAt||'']);
+    });
+
+    // Prepare visits sheet data
+    const visitRows = [['id','patientId','date','type','visitType','note','complication','complicationStatus','updatedAt']];
+    visits.forEach(v => {
+      visitRows.push([v.id||'', v.patientId||'', v.date||'', v.type||'', v.visitType||'', v.note||'', v.complication||'', v.complicationStatus||'', v.updatedAt||Date.now()]);
+    });
+
+    const batchBody = {
+      valueInputOption: 'RAW',
+      data: [
+        { range: 'Patients!A1', values: patientRows },
+        { range: 'Visits!A1', values: visitRows }
+      ]
+    };
+
+    // Create sheets if not exist first, then write data
+    await ensureSheetsExist();
+
+    const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sheetsAccessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(batchBody)
+    });
+
+    if (resp.status === 401) { sheetsAccessToken = null; isSyncing = false; return; }
+    if (!resp.ok) throw new Error('Sheets API error: ' + resp.status);
+
+    showToast('Sync สำเร็จ', 'ok');
+    localStorage.setItem('lastSheetsSync', new Date().toISOString());
+  } catch(e) {
+    showToast('Sync ล้มเหลว: ' + e.message);
+    console.error('performSheetsSync error', e);
+  } finally {
+    isSyncing = false;
+  }
+}
+
+async function ensureSheetsExist() {
+  // Get existing sheets
+  const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`, {
+    headers: { 'Authorization': `Bearer ${sheetsAccessToken}` }
+  });
+  if (!resp.ok) return;
+  const data = await resp.json();
+  const existingSheets = data.sheets.map(s => s.properties.title);
+
+  const needed = ['Patients', 'Visits'];
+  const toCreate = needed.filter(n => !existingSheets.includes(n));
+  if (toCreate.length === 0) return;
+
+  const requests = toCreate.map(title => ({ addSheet: { properties: { title } } }));
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${sheetsAccessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests })
+  });
+}
+
+async function syncFromSheets() {
+  if (!sheetsAccessToken) {
+    if (!sheetsTokenClient) initSheetsClient();
+    sheetsTokenClient.requestAccessToken({ prompt: '' });
+    return;
+  }
+  try {
+    showToast('กำลังดึงข้อมูลจาก Sheets...', 'info');
+    const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?ranges=Patients!A1:Z10000&ranges=Visits!A1:Z10000`, {
+      headers: { 'Authorization': `Bearer ${sheetsAccessToken}` }
+    });
+    if (!resp.ok) throw new Error('Sheets API error');
+    const data = await resp.json();
+
+    const [pRange, vRange] = data.valueRanges || [];
+    const pRows = (pRange?.values || []).slice(1); // skip header
+    const vRows = (vRange?.values || []).slice(1);
+
+    if (pRows.length === 0 && vRows.length === 0) {
+      showToast('ไม่มีข้อมูลใน Sheets');
+      return;
+    }
+
+    // Convert rows to objects
+    const patients = pRows.map(r => ({
+      id: r[0]||'', hn: r[1]||'', name: r[2]||'', dob: r[3]||'',
+      gender: r[4]||'', phone: r[5]||'', allergy: r[6]||'', createdAt: r[7]||''
+    })).filter(p => p.id);
+
+    const visits = vRows.map(r => ({
+      id: r[0]||'', patientId: r[1]||'', date: r[2]||'', type: r[3]||'',
+      visitType: r[4]||'', note: r[5]||'', complication: r[6]||'',
+      complicationStatus: r[7]||'', updatedAt: r[8]||''
+    })).filter(v => v.id);
+
+    // Write to IndexedDB
+    for (const p of patients) await dbPut('patients', p);
+    for (const v of visits) await dbPut('visits', v);
+
+    showToast(`ดึงข้อมูลสำเร็จ: ${patients.length} ผู้ป่วย, ${visits.length} visits`, 'ok');
+    await renderHome();
+  } catch(e) {
+    showToast('ดึงข้อมูลล้มเหลว: ' + e.message);
+    console.error('syncFromSheets error', e);
+  }
 }
 
 async function backupToDrive() {
