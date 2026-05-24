@@ -322,6 +322,7 @@ textarea.fctl{resize:vertical;min-height:80px;}
     <button id="driveBtn" class="btn btn-outline btn-sm" onclick="backupToDrive()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="Backup ไป Google Drive">☁️ Drive</button>
     <button id="syncBtn" class="btn btn-outline btn-sm" onclick="syncToSheets()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="Sync ไป Google Sheets">🔄 Sync</button>
     <button id="pullBtn" class="btn btn-outline btn-sm" onclick="syncFromSheets()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="ดึงข้อมูลจาก Google Sheets">⬇️ Pull</button>
+    <button id="autoSyncToggle" class="btn btn-outline btn-sm" onclick="toggleAutoSync()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="เปิด/ปิด Auto Sync">⚡ Auto</button>
     <button class="btn btn-success btn-sm" onclick="openAddPatient()">+ เพิ่มผู้ป่วย</button>
   </div>
 </nav>
@@ -2751,6 +2752,7 @@ async function _finalizeSavePatient(obj) {
   _editPatientLoadedUpdatedAt = obj.updatedAt; // N7: sync snapshot after save
   closePatientModal();
   showToast('บันทึกข้อมูลผู้ป่วยแล้ว','ok');
+  autoSync();
   if (document.getElementById('pageHome').classList.contains('active')) {
     loadHomePatients();
   } else {
@@ -3235,6 +3237,7 @@ async function _finalizeSaveVisit(obj, patientId) {
   currentPatientId = patientId;
   await renderPatientPage(patientId);
   showPage('pagePatient');
+  autoSync();
 }
 
 // ─── DRAG & DROP (block browser default everywhere) ──────────────────
@@ -6121,6 +6124,46 @@ let sheetsAccessToken = null;
 let isSyncing = false;
 
 let sheetsTokenCallback = null;
+
+// ─── AUTO SYNC ───────────────────────────────────────────────────────
+let autoSyncEnabled = localStorage.getItem('autoSyncEnabled') === 'true';
+
+function toggleAutoSync() {
+  autoSyncEnabled = !autoSyncEnabled;
+  localStorage.setItem('autoSyncEnabled', autoSyncEnabled);
+  updateAutoSyncBtn();
+  showToast(autoSyncEnabled ? '⚡ Auto Sync เปิดแล้ว' : '⚡ Auto Sync ปิดแล้ว', 'ok');
+}
+
+function updateAutoSyncBtn() {
+  const btn = document.getElementById('autoSyncToggle');
+  if (!btn) return;
+  if (autoSyncEnabled) {
+    btn.style.background = 'rgba(39,174,96,.6)';
+    btn.style.borderColor = 'rgba(39,174,96,.8)';
+    btn.textContent = '⚡ Auto: ON';
+  } else {
+    btn.style.background = 'rgba(255,255,255,.15)';
+    btn.style.borderColor = 'rgba(255,255,255,.3)';
+    btn.textContent = '⚡ Auto';
+  }
+}
+
+async function autoSync() {
+  if (!autoSyncEnabled) return;
+  if (!sheetsTokenClient) initSheetsClient();
+  if (!sheetsAccessToken) {
+    sheetsTokenCallback = performSheetsSync;
+    sheetsTokenClient.requestAccessToken({ prompt: '' });
+    return;
+  }
+  await performSheetsSync();
+}
+
+// อัพเดต button state หลัง page load
+window.addEventListener('load', () => {
+  setTimeout(updateAutoSyncBtn, 600);
+});
 
 function initSheetsClient() {
   if (!window.google || !window.google.accounts) return;
