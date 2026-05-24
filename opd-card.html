@@ -6305,11 +6305,13 @@ async function performSheetsSync() {
     const visits = await dbGetAll('visits');
     const patientRows = [['id','hn','name','dob','gender','phone','allergy','createdAt','_json']];
     patients.forEach(p => {
-      patientRows.push([p.id||'',p.hn||'',p.name||'',p.dob||'',p.gender||'',p.phone||'',p.allergy||'',p.createdAt||'',JSON.stringify(p)]);
+      const jsonStr = JSON.stringify(p).replace(/\n/g,'\\n').replace(/\r/g,'\\r');
+      patientRows.push([p.id||'',p.hn||'',p.name||'',p.dob||'',p.gender||'',p.phone||'',p.allergy||'',p.createdAt||'',jsonStr]);
     });
     const visitRows = [['id','patientId','date','type','_json']];
     visits.forEach(v => {
-      visitRows.push([v.id||'',v.patientId||'',v.date||'',v.type||'',JSON.stringify(v)]);
+      const jsonStr = JSON.stringify(v).replace(/\n/g,'\\n').replace(/\r/g,'\\r');
+      visitRows.push([v.id||'',v.patientId||'',v.date||'',v.type||'',jsonStr]);
     });
     await ensureSheetsExist();
     const batchBody = {
