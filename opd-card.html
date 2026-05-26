@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Security: prevent search engines from indexing this URL -->
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+<meta name="googlebot" content="noindex,nofollow">
 <title>OPD Card System</title>
 <!-- Google Identity Services (OAuth 2.0) -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1185,7 +1188,12 @@ function dbGetByIndex(store, idx, val) {
 }
 
 function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  // B4-fix: ใช้ crypto.randomUUID() (RFC 4122 v4) ถ้า browser รองรับ — ไม่มีโอกาส collision
+  // fallback เก่า: Date.now() + Math.random() (เผื่อ browser เก่ามาก หรือ insecure context)
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 }
 
 // ─── HYBRID PHOTO SYSTEM ─────────────────────────────────────────────
@@ -1250,12 +1258,30 @@ function blobToDataUrl(blob) {
     reader.readAsDataURL(blob);
   });
 }
+// B1-fix: centralized object URL cache (key = photo.id) — เพื่อ revoke ได้ตอนเปลี่ยน page
+const _objUrlCache = new Map();
+function _getOrCreateObjUrl(photo) {
+  if (!photo || !photo.blob) return '';
+  const k = photo.id || ('_anon_' + (photo._anonKey ||= Math.random().toString(36).slice(2)));
+  let url = _objUrlCache.get(k);
+  if (!url) {
+    url = URL.createObjectURL(photo.blob);
+    _objUrlCache.set(k, url);
+  }
+  return url;
+}
+function releasePhotoUrls() {
+  // เรียกตอนเปลี่ยน page เพื่อคืน memory
+  for (const url of _objUrlCache.values()) {
+    try { URL.revokeObjectURL(url); } catch(e) {}
+  }
+  _objUrlCache.clear();
+}
 async function getPhotoSrc(photo) {
   if (!photo) return PHOTO_PLACEHOLDER;
-  // มี blob (รูปใหม่ format) → สร้าง object URL (cached on photo object)
+  // มี blob (รูปใหม่ format) → สร้าง object URL (cached centrally — revoke ได้ตอนเปลี่ยน page)
   if (photo.blob) {
-    if (!photo._url) photo._url = URL.createObjectURL(photo.blob);
-    return photo._url;
+    return _getOrCreateObjUrl(photo);
   }
   // มี dataUrl อยู่แล้ว (legacy รูปเก่าหรือ cache)
   if (photo.dataUrl) return photo.dataUrl;
@@ -1271,10 +1297,18 @@ async function getPhotoSrc(photo) {
       return PHOTO_PLACEHOLDER;
     }
     try {
-      const resp = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${photo.driveFileId}?alt=media`,
-        { headers: { Authorization: `Bearer ${sheetsAccessToken}` } }
-      );
+      // B5-fix: ใส่ AbortSignal timeout 30 วินาที — กันค้างถ้าเน็ตหลุด
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 30000);
+      let resp;
+      try {
+        resp = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${photo.driveFileId}?alt=media`,
+          { headers: { Authorization: `Bearer ${sheetsAccessToken}` }, signal: ctrl.signal }
+        );
+      } finally {
+        clearTimeout(timer);
+      }
       if (resp.ok) {
         const blob = await resp.blob();
         const dataUrl = await new Promise(resolve => {
@@ -1309,7 +1343,22 @@ async function cleanExpiredCache() {
     let cleaned = 0;
     for (const ph of photos) {
       if (ph.driveFileId && ph.cachedAt && new Date(ph.cachedAt).getTime() < cutoff) {
-        await dbPut('photos', { ...ph, dataUrl: null, cachedAt: null });
+        // Verify file ยังอยู่ใน Drive ก่อนลบ cache — กันรูปหายถาวร
+        if (sheetsAccessToken) {
+          try {
+            const verifyResp = await fetch(`https://www.googleapis.com/drive/v3/files/${ph.driveFileId}?fields=id`, {
+              method: 'HEAD',
+              headers: { Authorization: `Bearer ${sheetsAccessToken}` }
+            });
+            if (!verifyResp.ok) {
+              dwarn(`cleanExpiredCache: skip ${ph.id} — Drive file missing (${verifyResp.status})`);
+              continue;
+            }
+          } catch(e) { dwarn('verify Drive file failed', e); continue; }
+        } else {
+          continue; // ไม่มี token → skip (ไม่กล้าลบโดยไม่ verify)
+        }
+        await dbPut('photos', { ...ph, dataUrl: null, blob: null, cachedAt: null });
         cleaned++;
       }
     }
@@ -1339,6 +1388,10 @@ function showPage(id) {
   window.scrollTo(0, 0);
   const bb = document.getElementById('globalBackBtn');
   if (bb) bb.style.display = pageHistory.length > 0 ? 'flex' : 'none';
+  // B1-fix: คืน memory ตอนกลับ home / dashboard / charts (ไม่ใช่หน้ารูป)
+  if (id === 'pageHome' || id === 'pageDashboard' || id === 'pageCharts' || id === 'pageOutcomes') {
+    if (typeof releasePhotoUrls === 'function') releasePhotoUrls();
+  }
 }
 
 function goBack() {
@@ -1745,7 +1798,7 @@ function toggleOngoingFilter(type) {
 async function onProcedureInput(val) {
   const dd = document.getElementById('procDD');
   if (!val.trim()) { dd.classList.remove('show'); return; }
-  const allVisits = await dbGetAll('visits');
+  const allVisits = (await dbGetAll('visits')).filter(notDeleted);
   const q = val.toLowerCase();
   const allProcNames = [];
   allVisits.forEach(v => {
@@ -2470,7 +2523,7 @@ async function buildTimeline(visits) {
     let thumbsHTML = '';
     if (isEager) {
       // โหลดรูปทันที (visit แรก + ล่าสุด)
-      const photos = await dbGetByIndex('photos','visitId', v.id);
+      const photos = (await dbGetByIndex('photos','visitId', v.id)).filter(notDeleted);
       if (photos.length) {
         const shown = photos.slice(0,5);
         const srcs = await Promise.all(shown.map(ph => getPhotoSrc(ph)));
@@ -2590,7 +2643,7 @@ async function _loadLazyDiv(el) {
   if (el.dataset.loaded) return;
   el.dataset.loaded = '1';
   const visitId = el.dataset.visitId;
-  const photos = await dbGetByIndex('photos', 'visitId', visitId);
+  const photos = (await dbGetByIndex('photos', 'visitId', visitId)).filter(notDeleted);
   if (!photos.length) { el.style.minHeight = ''; return; }
   const shown = photos.slice(0, 5);
   const srcs = await Promise.all(shown.map(ph => getPhotoSrc(ph)));
@@ -2913,7 +2966,10 @@ function closePatientModal() {
   document.getElementById('overlayPatient').classList.remove('show');
 }
 
+let _isSavingPatient = false;
 async function savePatient() {
+  // B3-fix: double-click guard
+  if (_isSavingPatient) { return; }
   const name = document.getElementById('fName').value.trim();
   if (!name) { showToast('กรุณากรอกชื่อผู้ป่วย'); return; }
   // M10: validate DOB (reject impossible dates like Feb 31)
@@ -2963,15 +3019,20 @@ async function savePatient() {
 }
 
 async function _finalizeSavePatient(obj) {
-  await dbPut('patients', obj);
-  _editPatientLoadedUpdatedAt = obj.updatedAt; // N7: sync snapshot after save
-  closePatientModal();
-  showToast('บันทึกข้อมูลผู้ป่วยแล้ว','ok');
-  autoSync();
-  if (document.getElementById('pageHome').classList.contains('active')) {
-    loadHomePatients();
-  } else {
-    renderPatientPage(obj.id);
+  _isSavingPatient = true; // B3-fix
+  try {
+    await dbPut('patients', obj);
+    _editPatientLoadedUpdatedAt = obj.updatedAt; // N7: sync snapshot after save
+    closePatientModal();
+    showToast('บันทึกข้อมูลผู้ป่วยแล้ว','ok');
+    autoSync();
+    if (document.getElementById('pageHome').classList.contains('active')) {
+      loadHomePatients();
+    } else {
+      renderPatientPage(obj.id);
+    }
+  } finally {
+    _isSavingPatient = false; // B3-fix
   }
 }
 
@@ -3324,7 +3385,10 @@ function closeVisitModal() {
   pendingPhotos = [];
 }
 
+let _isSavingVisit = false;
 async function saveVisit() {
+  // B3-fix: double-click guard
+  if (_isSavingVisit) { return; }
   const patientId = document.getElementById('editVisitPatientId').value;
   const date      = document.getElementById('vDate').value;
   if (!date) { showToast('กรุณาเลือกวันที่'); return; }
@@ -3418,6 +3482,8 @@ async function saveVisit() {
 }
 
 async function _finalizeSaveVisit(obj, patientId) {
+  _isSavingVisit = true; // B3-fix
+  try {
   const id = obj.id;
   await dbPut('visits', obj);
   _editVisitLoadedUpdatedAt = obj.updatedAt; // N7: sync snapshot after save
@@ -3454,6 +3520,9 @@ async function _finalizeSaveVisit(obj, patientId) {
   await renderPatientPage(patientId);
   showPage('pagePatient');
   autoSync();
+  } finally {
+    _isSavingVisit = false; // B3-fix
+  }
 }
 
 // ─── DRAG & DROP (block browser default everywhere) ──────────────────
@@ -3635,7 +3704,7 @@ function setPendingPhotoType(i, type) {
 // ─── PHOTO REORDER ──────────────────────────────────────────────────
 async function movePhoto(photoId, section, visitId, dir, e) {
   if (e) e.stopPropagation();
-  const allPhotos = await dbGetByIndex('photos', 'visitId', visitId);
+  const allPhotos = (await dbGetByIndex('photos', 'visitId', visitId)).filter(notDeleted);
   const sectionPhotos = allPhotos
     .filter(ph => section === 'before' ? ph.photoType === 'before'
                 : section === 'after'  ? ph.photoType === 'after'
@@ -3760,27 +3829,39 @@ function lbDownload() {
 }
 
 // ─── DOWNLOAD ALL PHOTOS IN VISIT ────────────────────────────────────
+// Track download timers per visit so we can cancel if user navigates away
+const _downloadTimers = new Set();
+function _clearDownloadTimers() {
+  for (const t of _downloadTimers) clearTimeout(t);
+  _downloadTimers.clear();
+}
 async function downloadAllPhotos(visitId) {
-  const photos = await dbGetByIndex('photos', 'visitId', visitId);
+  const photos = (await dbGetByIndex('photos', 'visitId', visitId)).filter(notDeleted);
   if (!photos.length) { showToast('ไม่มีรูปภาพ'); return; }
   const v = await dbGet('visits', visitId);
   const p = v ? await dbGet('patients', v.patientId) : null;
   const nameBase = p ? p.name.replace(/\s+/g,'_') : 'patient';
   const date = v ? v.date : 'date';
   showToast(`⏳ กำลังเตรียมรูป ${photos.length} รูป...`, 'info');
+  // Cancel any pending downloads from previous calls
+  _clearDownloadTimers();
   for (let i = 0; i < photos.length; i++) {
     const ph = photos[i];
     const src = await getPhotoSrc(ph);
     if (src === PHOTO_PLACEHOLDER) continue;
-    setTimeout(() => {
+    const t = setTimeout(() => {
+      _downloadTimers.delete(t);
       const a = document.createElement('a');
       a.href = src;
       a.download = `${nameBase}_${date}_${ph.photoType||'photo'}_${i+1}.jpg`;
       a.click();
     }, i * 120);
+    _downloadTimers.add(t);
   }
   showToast(`กำลังดาวน์โหลด ${photos.length} รูป...`, 'ok');
 }
+// Cancel any pending downloads when navigating away
+window.addEventListener('beforeunload', _clearDownloadTimers);
 
 // ─── PENDING PHOTO PREVIEW ───────────────────────────────────────────
 function openPhPreview(src) {
@@ -3911,7 +3992,7 @@ async function openCrossVisitCompare(patientId) {
       }));
       hideProgress();
       // โหลด photos ใหม่หลัง cache แล้ว
-      const refreshed = await dbGetByIndex('photos', 'patientId', patientId);
+      const refreshed = (await dbGetByIndex('photos', 'patientId', patientId)).filter(notDeleted);
       photos.splice(0, photos.length, ...refreshed);
     }
 
@@ -3960,7 +4041,7 @@ async function openCrossVisitCompare(patientId) {
                        : ph.photoType === 'after' ? 'After'
                        : (ph.photoType || 'Photo');
         const fullLabel = `${visitLabel} · ${typeLbl}`;
-        const src = ph.dataUrl || (ph.blob ? (ph._url ||= URL.createObjectURL(ph.blob)) : PHOTO_PLACEHOLDER);
+        const src = ph.dataUrl || (ph.blob ? _getOrCreateObjUrl(ph) : PHOTO_PLACEHOLDER);
         const srcEsc = src.replace(/"/g,'&quot;');
         // src kept on <img> only; onclick uses delegated listener via data-xv-id
         return `<div class="xv-card" data-xv-id="${esc(ph.id)}" data-xv-label="${esc(fullLabel)}" style="position:relative;border:2px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;background:#fff;transition:border-color .15s;">
@@ -4009,8 +4090,8 @@ async function openCrossVisitCompare(patientId) {
       const ph = photos.find(p => p.id === id);
       let src;
       if (ph && ph.dataUrl) src = ph.dataUrl;
-      else if (ph && ph.blob) src = (ph._url ||= URL.createObjectURL(ph.blob));
-      else { const fresh = await dbGet('photos', id); src = fresh && (fresh.dataUrl || (fresh.blob ? URL.createObjectURL(fresh.blob) : '')) || PHOTO_PLACEHOLDER; }
+      else if (ph && ph.blob) src = _getOrCreateObjUrl(ph);
+      else { const fresh = await dbGet('photos', id); src = fresh && (fresh.dataUrl || (fresh.blob ? _getOrCreateObjUrl(fresh) : '')) || PHOTO_PLACEHOLDER; }
       _xvSelectPhoto(id, src, label, ev);
     });
   } catch (err) {
@@ -4380,7 +4461,9 @@ function fmtDate(d) {
   if (isNaN(dt)) return d;
   const day   = String(dt.getDate()).padStart(2,'0');
   const month = String(dt.getMonth()+1).padStart(2,'0');
-  const year  = dt.getFullYear() + 543;
+  // Guard: ถ้าปีมากกว่า 2400 ถือว่าเป็น พ.ศ. อยู่แล้ว ไม่ต้องบวก 543 อีก
+  const rawYear = dt.getFullYear();
+  const year = rawYear > 2400 ? rawYear : rawYear + 543;
   return `${day}/${month}/${year}`;
 }
 
@@ -4445,7 +4528,7 @@ async function goDashboardProc(procName, ceYear, monthIdx) {
   currentPatientId = null;
   currentVisitId   = null;
   showPage('pageHome');
-  const allVisits = await dbGetAll('visits');
+  const allVisits = (await dbGetAll('visits')).filter(notDeleted);
   const pq = procName.toLowerCase();
   const matchingVisits = allVisits.filter(v => {
     if (!v.date) return false;
@@ -4470,7 +4553,7 @@ async function goDashboardPeriodAll(ceYear, monthIdx, type) {
   currentPatientId = null;
   currentVisitId   = null;
   showPage('pageHome');
-  const allVisits = await dbGetAll('visits');
+  const allVisits = (await dbGetAll('visits')).filter(notDeleted);
   const matchingVisits = allVisits.filter(v => {
     if (!v.date) return false;
     const d = new Date(v.date);
@@ -5292,15 +5375,27 @@ function _showImportConflictDialog(message, callback) {
 // ─── INIT ────────────────────────────────────────────────────
 async function migrateDOBYears() {
   const pts = await dbGetAll('patients');
+  // Collect records needing migration
+  const toMigrate = [];
   for (const p of pts) {
     if (!p.dob) continue;
     const y = parseInt(p.dob.split('-')[0]);
     if (y > 2400) {
       const ce = y - 543;
       p.dob = p.dob.replace(/^\d+/, String(ce));
-      await dbPut('patients', p);
+      toMigrate.push(p);
     }
   }
+  if (!toMigrate.length) return;
+  // Batch all updates in single transaction
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('patients', 'readwrite');
+    const store = tx.objectStore('patients');
+    for (const p of toMigrate) store.put(p);
+    tx.oncomplete = () => { dlog(`migrateDOBYears: ${toMigrate.length} records updated`); resolve(); };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
 }
 
 async function initApp() {
@@ -6293,7 +6388,13 @@ async function exportPatientPDF(patientId) {
   const allPhotos = await dbGetByIndex('photos', 'patientId', patientId);
   const needFetch = allPhotos.filter(ph => !ph.dataUrl && !ph.blob && ph.driveFileId).length;
   let fetchedCount = 0;
-  if (needFetch > 0) showToast(`⏳ กำลังโหลดรูป 0/${needFetch}...`, 'info');
+  // B5-fix: บอกตอนเริ่มเสมอ + warning ถ้าโหลดนานเกิน 30 วินาที
+  showToast(needFetch > 0 ? `⏳ กำลังเตรียม PDF — โหลดรูป 0/${needFetch}...` : '⏳ กำลังเตรียม PDF...', 'info');
+  const _slowWarnTimer = setTimeout(() => {
+    if (needFetch > 0 && fetchedCount < needFetch) {
+      showToast(`⚠️ โหลดรูปช้ากว่าปกติ — ตรวจ internet หรือ token (${fetchedCount}/${needFetch})`, 'info');
+    }
+  }, 30000);
 
   // Build photo rows per visit
   async function getVisitPhotos(vid) {
@@ -6510,6 +6611,7 @@ async function exportPatientPDF(patientId) {
 </body>
 </html>`;
 
+  clearTimeout(_slowWarnTimer); // B5-fix: ยกเลิก warning ถ้าโหลดเสร็จทัน
   if (needFetch > 0) showToast(`✅ โหลดรูปครบ ${needFetch} รูป กำลังเปิด PDF...`, 'ok');
   const win = window.open('', '_blank');
   if (!win) { showToast('⚠️ กรุณาอนุญาต popup เพื่อ export PDF', 'error'); return; }
@@ -6645,10 +6747,16 @@ async function performDriveUpload() {
 
 // โหลด Drive client หลัง Google script พร้อม
 window.addEventListener('load', () => {
+  let _waitGISTries = 0;
   const waitGIS = setInterval(() => {
+    _waitGISTries++;
     if (window.google && window.google.accounts) {
       clearInterval(waitGIS);
       if (DRIVE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID_HERE') initDriveClient();
+    } else if (_waitGISTries >= 30) {
+      // หลังพยายาม 30 ครั้ง (~15 วินาที) → ยอมแพ้
+      clearInterval(waitGIS);
+      dwarn('Google Identity Services load failed (no internet?)');
     }
   }, 500);
 });
