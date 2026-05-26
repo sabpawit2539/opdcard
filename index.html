@@ -320,13 +320,22 @@ textarea.fctl{resize:vertical;min-height:80px;}
     <button class="btn btn-outline btn-sm" onclick="showDashboard()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;">📊 สรุปรายเดือน</button>
     <button class="btn btn-outline btn-sm" onclick="showCharts()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;">📈 กราฟ</button>
     <button class="btn btn-outline btn-sm" onclick="showOutcomes()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;">🎯 Outcomes</button>
-    <button class="btn btn-outline btn-sm" onclick="exportData()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="Backup ข้อมูล">💾 Export</button>
-    <label class="btn btn-outline btn-sm" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;cursor:pointer;" title="นำข้อมูลกลับเข้า">📂 Import<input type="file" accept=".json" style="display:none;" onchange="importData(this)"></label>
     <button id="driveBtn" class="btn btn-outline btn-sm" onclick="backupToDrive()" style="display:none;" title="Backup JSON (legacy)">☁️ Drive</button>
     <button id="syncBtn" class="btn btn-outline btn-sm" onclick="syncAll()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="Sync ข้อมูล+รูป ขึ้น Google Drive/Sheets"><span id="syncBtnLabel">🔄 Sync</span></button>
     <button id="pullBtn" class="btn btn-outline btn-sm" onclick="syncFromSheets()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="ดึงข้อมูล + รูป จาก Google Drive/Sheets">⬇️ Pull</button>
-    <button id="autoSyncToggle" class="btn btn-outline btn-sm" onclick="toggleAutoSync()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="เปิด/ปิด Auto Sync">⚡ Auto</button>
-    <button id="autoLoginToggle" class="btn btn-outline btn-sm" onclick="toggleAutoLogin()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="เปิด/ปิด Auto Login Google">🔑 Login</button>
+    <!-- More menu -->
+    <div style="position:relative;" id="moreMenuWrap">
+      <button class="btn btn-outline btn-sm" onclick="toggleMoreMenu()" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;" title="เมนูเพิ่มเติม">⚙️ ▾</button>
+      <div id="moreMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:#fff;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);overflow:hidden;z-index:400;min-width:170px;border:1px solid #e0e0e0;">
+        <button onclick="exportData();closeMoreMenu()" style="width:100%;padding:11px 16px;text-align:left;background:none;border:none;cursor:pointer;font-size:14px;color:#2c3e50;display:flex;align-items:center;gap:10px;" onmouseover="this.style.background='#f4f6f7'" onmouseout="this.style.background='none'">💾 Export</button>
+        <label onclick="closeMoreMenu()" style="width:100%;padding:11px 16px;text-align:left;background:none;border:none;cursor:pointer;font-size:14px;color:#2c3e50;display:flex;align-items:center;gap:10px;box-sizing:border-box;" onmouseover="this.style.background='#f4f6f7'" onmouseout="this.style.background='none'">📂 Import<input type="file" accept=".json" style="display:none;" onchange="importData(this)"></label>
+        <div style="height:1px;background:#eee;margin:0 12px;"></div>
+        <button id="autoSyncToggle" onclick="toggleAutoSync()" style="width:100%;padding:11px 16px;text-align:left;background:none;border:none;cursor:pointer;font-size:14px;color:#2c3e50;display:flex;align-items:center;gap:10px;" onmouseover="this.style.background='#f4f6f7'" onmouseout="this.style.background='none'">⚡ Auto Sync: OFF</button>
+        <button id="autoLoginToggle" onclick="toggleAutoLogin()" style="width:100%;padding:11px 16px;text-align:left;background:none;border:none;cursor:pointer;font-size:14px;color:#2c3e50;display:flex;align-items:center;gap:10px;" onmouseover="this.style.background='#f4f6f7'" onmouseout="this.style.background='none'">🔑 Auto Login: OFF</button>
+        <div style="height:1px;background:#eee;margin:0 12px;"></div>
+        <button onclick="showTrash();closeMoreMenu()" style="width:100%;padding:11px 16px;text-align:left;background:none;border:none;cursor:pointer;font-size:14px;color:#2c3e50;display:flex;align-items:center;gap:10px;" onmouseover="this.style.background='#f4f6f7'" onmouseout="this.style.background='none'">🗑 ถังขยะ</button>
+      </div>
+    </div>
     <button class="btn btn-success btn-sm" onclick="openAddPatient()">+ เพิ่มผู้ป่วย</button>
   </div>
 </nav>
@@ -590,6 +599,20 @@ textarea.fctl{resize:vertical;min-height:80px;}
     <div class="card" id="visitCard">
       <!-- filled by JS -->
     </div>
+  </div>
+</div>
+
+<!-- PAGE: TRASH (ถังขยะ) -->
+<div class="page" id="pageTrash">
+  <div class="container">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+      <button class="back-btn" onclick="showHome()">← กลับ</button>
+      <h2 style="font-size:18px;font-weight:700;color:#6c3483;">🗑 ถังขยะ — กู้คืนข้อมูลที่ลบไป</h2>
+    </div>
+    <div style="background:#fef9e7;border:1px solid #f4d03f;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#7d6608;">
+      ⏰ <b>เก็บไว้ 30 วัน</b> หลังลบ — เกินจากนั้นจะลบถาวรอัตโนมัติ · ปุ่ม <b>กู้คืน</b> จะนำข้อมูลกลับมา · ปุ่ม <b>ลบถาวร</b> ลบทันที กู้ไม่ได้
+    </div>
+    <div id="trashContent"></div>
   </div>
 </div>
 
@@ -1389,9 +1412,14 @@ function showPage(id) {
   const bb = document.getElementById('globalBackBtn');
   if (bb) bb.style.display = pageHistory.length > 0 ? 'flex' : 'none';
   // B1-fix: คืน memory ตอนกลับ home / dashboard / charts (ไม่ใช่หน้ารูป)
-  if (id === 'pageHome' || id === 'pageDashboard' || id === 'pageCharts' || id === 'pageOutcomes') {
+  if (id === 'pageHome' || id === 'pageDashboard' || id === 'pageCharts' || id === 'pageOutcomes' || id === 'pageTrash') {
     if (typeof releasePhotoUrls === 'function') releasePhotoUrls();
   }
+  // auto-refresh หน้าที่แสดงสถิติ — ให้ข้อมูลถูกต้องเสมอเมื่อเปิดหน้า ไม่ว่าจะมาจาก Back หรือ nav
+  if (id === 'pageDashboard' && typeof renderDashboard === 'function') renderDashboard();
+  if (id === 'pageCharts'    && typeof renderCharts    === 'function') renderCharts();
+  if (id === 'pageOutcomes'  && typeof renderOutcomes  === 'function') renderOutcomes();
+  if (id === 'pageTrash'     && typeof renderTrash     === 'function') renderTrash();
 }
 
 function goBack() {
@@ -1402,6 +1430,11 @@ function goBack() {
   window.scrollTo(0, 0);
   const bb = document.getElementById('globalBackBtn');
   if (bb) bb.style.display = pageHistory.length > 0 ? 'flex' : 'none';
+  // goBack-fix: refresh หน้าสถิติเมื่อกด Back เพื่อให้ข้อมูลไม่ค้าง
+  if (prev === 'pageDashboard' && typeof renderDashboard === 'function') renderDashboard();
+  if (prev === 'pageCharts'    && typeof renderCharts    === 'function') renderCharts();
+  if (prev === 'pageOutcomes'  && typeof renderOutcomes  === 'function') renderOutcomes();
+  if (prev === 'pageTrash'     && typeof renderTrash     === 'function') renderTrash();
 }
 
 function showHome() {
@@ -3510,12 +3543,13 @@ async function _finalizeSaveVisit(obj, patientId) {
       photoFailCount++;
     }
   }
+  // B10-fix: ถ้ารูปบันทึกไม่ได้ให้แสดง error — ไม่แสดง "สำเร็จ" ทับ
   if (photoFailCount > 0) {
-    showToast(`บันทึกรูปไม่ได้ ${photoFailCount} รูป (ไฟล์เสีย/ไม่ใช่ภาพ) — รูปอื่นบันทึกสำเร็จ`);
+    showToast(`⚠️ บันทึกรูปไม่ได้ ${photoFailCount} รูป (ไฟล์เสีย/ไม่ใช่ภาพ) — ข้อมูล Visit บันทึกสำเร็จแล้ว`);
+  } else {
+    showToast('บันทึก Visit แล้ว','ok');
   }
-
   closeVisitModal();
-  showToast('บันทึก Visit แล้ว','ok');
   currentPatientId = patientId;
   await renderPatientPage(patientId);
   showPage('pagePatient');
@@ -3726,11 +3760,33 @@ async function movePhoto(photoId, section, visitId, dir, e) {
 
 async function deletePhoto(photoId, visitId, e) {
   if (e) e.stopPropagation();
-  showConfirm('ลบรูปภาพ', 'รูปนี้จะถูกลบถาวร ไม่สามารถกู้คืนได้', async () => {
-    await dbDelete('photos', photoId);
-    showToast('ลบรูปแล้ว');
+  // B8-fix: เปลี่ยนจากลบถาวรเป็น soft delete — กู้คืนได้ภายใน 30 วันในถังขยะ
+  showConfirm('ลบรูปภาพ', 'รูปจะถูกย้ายไปถังขยะ สามารถกู้คืนได้ภายใน 30 วัน', async () => {
+    await softDelete('photos', photoId);
+    showToast('ย้ายรูปไปถังขยะแล้ว');
     await renderVisitPage(visitId);
   });
+}
+
+async function restorePhoto(photoId) {
+  const ph = await dbGet('photos', photoId);
+  if (!ph) { showToast('ไม่พบข้อมูลรูป'); return; }
+  delete ph.deletedAt;
+  await dbPut('photos', ph);
+  showToast('✅ กู้คืนรูปสำเร็จ', 'ok');
+  renderTrash();
+}
+
+function permanentDeletePhoto(photoId) {
+  showConfirm(
+    '⚠️ ลบรูปถาวร',
+    'รูปนี้จะถูกลบถาวร ไม่สามารถกู้คืนได้\n\nยืนยันลบถาวร?',
+    async () => {
+      await dbDelete('photos', photoId);
+      showToast('ลบรูปถาวรแล้ว', 'ok');
+      renderTrash();
+    }
+  );
 }
 
 function fileToDataUrl(file) {
@@ -4296,18 +4352,22 @@ function confirmDeletePatient(id) {
     try {
       const patSnap = await softDelete('patients', id);
       if (!patSnap) return;
-      const visits = await dbGetByIndex('visits','patientId', id);
+      // BUG-FIX: softDelete คืน snapshot ก่อนเซต deletedAt → patSnap.deletedAt เป็น undefined
+      // ใช้ timestamp ใหม่แทน เพื่อให้ visits/photos ถูก soft-delete จริง
+      const deletedAt = new Date().toISOString();
+      // filter(notDeleted): ไม่นำ visit/รูปที่ถูก soft-delete ไปแล้วมา snapshot ซ้ำ
+      const visits = (await dbGetByIndex('visits','patientId', id)).filter(notDeleted);
       const visitSnaps = [];
       for (const v of visits) {
         visitSnaps.push({ ...v });
-        v.deletedAt = patSnap.deletedAt;
+        v.deletedAt = deletedAt;
         await dbPut('visits', v);
       }
-      const photos = await dbGetByIndex('photos','patientId', id);
+      const photos = (await dbGetByIndex('photos','patientId', id)).filter(notDeleted);
       const photoSnaps = [];
       for (const ph of photos) {
         photoSnaps.push({ ...ph });
-        ph.deletedAt = patSnap.deletedAt;
+        ph.deletedAt = deletedAt;
         await dbPut('photos', ph);
       }
       showHome();
@@ -4364,11 +4424,14 @@ function confirmDeleteVisit(id) {
       // Soft delete: snapshot visit + photos, set deletedAt on each
       const visitSnap = await softDelete('visits', id);
       if (!visitSnap) return;
-      const photos = await dbGetByIndex('photos','visitId', id);
+      // BUG-FIX: softDelete คืน snapshot ก่อนเซต deletedAt → visitSnap.deletedAt เป็น undefined
+      const deletedAt = new Date().toISOString();
+      // filter(notDeleted): ไม่นำรูปที่ถูก soft-delete ไปแล้วมา snapshot ซ้ำ
+      const photos = (await dbGetByIndex('photos','visitId', id)).filter(notDeleted);
       const photoSnaps = [];
       for (const ph of photos) {
         photoSnaps.push({ ...ph });
-        ph.deletedAt = visitSnap.deletedAt;
+        ph.deletedAt = deletedAt;
         await dbPut('photos', ph);
       }
       if (currentPatientId) {
@@ -4448,6 +4511,192 @@ async function purgeOldTrash() {
 // Filter helper: exclude soft-deleted records
 function notDeleted(r) { return !r.deletedAt; }
 
+// ─── TRASH PAGE ──────────────────────────────────────────────────────
+function showTrash() {
+  showPage('pageTrash'); // showPage จะ call renderTrash() เองแล้ว
+}
+
+async function renderTrash() {
+  const el = document.getElementById('trashContent');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-light);">⏳ กำลังโหลด...</div>';
+
+  const [allPatients, allVisits, allPhotos] = await Promise.all([
+    dbGetAll('patients'), dbGetAll('visits'), dbGetAll('photos')
+  ]);
+  const delPatients = allPatients.filter(p => p.deletedAt).sort((a,b) => (b.deletedAt||'').localeCompare(a.deletedAt||''));
+  const delVisits = allVisits.filter(v => v.deletedAt).sort((a,b) => (b.deletedAt||'').localeCompare(a.deletedAt||''));
+
+  // ตัด visit ที่ patient parent ถูกลบไปด้วย (จะกู้พร้อมกัน ไม่ต้องแสดงซ้ำ)
+  const delPatientIds = new Set(delPatients.map(p => p.id));
+  const orphanVisits = delVisits.filter(v => !delPatientIds.has(v.patientId));
+
+  // B8-fix: รูปที่ลบเดี่ยว (ไม่ใช่ลบพร้อม visit/patient)
+  const delVisitIds = new Set(delVisits.map(v => v.id));
+  const orphanPhotos = allPhotos
+    .filter(ph => ph.deletedAt)
+    .filter(ph => !delVisitIds.has(ph.visitId) && !delPatientIds.has(ph.patientId))
+    .sort((a,b) => (b.deletedAt||'').localeCompare(a.deletedAt||''));
+
+  // map ชื่อ patient และ visit ของแต่ละรูป
+  const ptMap = new Map(allPatients.map(p => [p.id, p]));
+  const visitMap = new Map(allVisits.map(v => [v.id, v]));
+
+  const daysLeft = (deletedAt) => {
+    const elapsed = Math.floor((Date.now() - new Date(deletedAt).getTime()) / (24*3600*1000));
+    return Math.max(0, 30 - elapsed);
+  };
+
+  if (delPatients.length === 0 && orphanVisits.length === 0 && orphanPhotos.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-light);"><div style="font-size:48px;margin-bottom:12px;">🗑</div><div style="font-size:15px;">ถังขยะว่างเปล่า</div><div style="font-size:13px;margin-top:6px;">ไม่มีรายการที่ถูกลบในรอบ 30 วัน</div></div>';
+    return;
+  }
+
+  let html = '';
+
+  // ผู้ป่วย
+  if (delPatients.length > 0) {
+    html += `<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px;">👤 ผู้ป่วยที่ลบ (${delPatients.length})</div>`;
+    html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;">';
+    for (const p of delPatients) {
+      const visitCount = allVisits.filter(v => v.patientId === p.id).length;
+      const photoCount = allPhotos.filter(ph => ph.patientId === p.id).length;
+      const dleft = daysLeft(p.deletedAt);
+      const dColor = dleft <= 3 ? '#e74c3c' : dleft <= 7 ? '#e67e22' : '#7f8c8d';
+      html += `
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);">${esc(p.name||'(ไม่มีชื่อ)')}${p.hn ? ` <span style="font-size:12px;color:var(--text-light);font-weight:400;">HN: ${esc(p.hn)}</span>` : ''}</div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:4px;">
+              ลบเมื่อ ${fmtDate(p.deletedAt)} · <span style="color:${dColor};font-weight:600;">เหลือ ${dleft} วัน</span> · จะกู้คืน ${visitCount} visit + ${photoCount} รูป
+            </div>
+          </div>
+          <button class="btn btn-sm" onclick="restorePatient('${esc(p.id)}')" style="background:#27ae60;color:#fff;border:none;">🔄 กู้คืน</button>
+          <button class="btn btn-sm" onclick="permanentDeletePatient('${esc(p.id)}')" style="background:#fff;color:#c0392b;border:1px solid #e74c3c;">❌ ลบถาวร</button>
+        </div>`;
+    }
+    html += '</div>';
+  }
+
+  // Visit เดี่ยว (ที่ patient ยังไม่ถูกลบ)
+  if (orphanVisits.length > 0) {
+    html += `<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px;">📋 Visit ที่ลบ (${orphanVisits.length})</div>`;
+    html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;">';
+    for (const v of orphanVisits) {
+      const pt = ptMap.get(v.patientId);
+      const photoCount = allPhotos.filter(ph => ph.visitId === v.id).length;
+      const dleft = daysLeft(v.deletedAt);
+      const dColor = dleft <= 3 ? '#e74c3c' : dleft <= 7 ? '#e67e22' : '#7f8c8d';
+      html += `
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-size:13px;color:var(--text);">${pt ? esc(pt.name) : '(ไม่ทราบชื่อ)'} · <span style="color:var(--text-light);">${v.type||''} ${fmtDate(v.date)}</span></div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:4px;">
+              ลบเมื่อ ${fmtDate(v.deletedAt)} · <span style="color:${dColor};font-weight:600;">เหลือ ${dleft} วัน</span> · จะกู้คืน ${photoCount} รูป
+            </div>
+          </div>
+          <button class="btn btn-sm" onclick="restoreVisit('${esc(v.id)}')" style="background:#27ae60;color:#fff;border:none;">🔄 กู้คืน</button>
+          <button class="btn btn-sm" onclick="permanentDeleteVisit('${esc(v.id)}')" style="background:#fff;color:#c0392b;border:1px solid #e74c3c;">❌ ลบถาวร</button>
+        </div>`;
+    }
+    html += '</div>';
+  }
+
+  // B8-fix: รูปที่ลบเดี่ยว
+  if (orphanPhotos.length > 0) {
+    html += `<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px;">🖼️ รูปที่ลบ (${orphanPhotos.length})</div>`;
+    html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+    for (const ph of orphanPhotos) {
+      const pt = ptMap.get(ph.patientId);
+      const v = visitMap.get(ph.visitId);
+      const typeLabel = ph.photoType === 'before' ? 'Before' : ph.photoType === 'after' ? 'After' : ph.photoType || 'รูป';
+      const dleft = daysLeft(ph.deletedAt);
+      const dColor = dleft <= 3 ? '#e74c3c' : dleft <= 7 ? '#e67e22' : '#7f8c8d';
+      html += `
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-size:13px;color:var(--text);">
+              🖼️ <span style="font-size:11px;background:#eaf4fb;color:#2e86c1;padding:2px 7px;border-radius:8px;font-weight:600;">${esc(typeLabel)}</span>
+              ${pt ? ` · ${esc(pt.name)}` : ''}
+              ${v ? ` · <span style="color:var(--text-light);">${v.type||''} ${fmtDate(v.date)}</span>` : ''}
+            </div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:4px;">
+              ลบเมื่อ ${fmtDate(ph.deletedAt)} · <span style="color:${dColor};font-weight:600;">เหลือ ${dleft} วัน</span>
+            </div>
+          </div>
+          <button class="btn btn-sm" onclick="restorePhoto('${esc(ph.id)}')" style="background:#27ae60;color:#fff;border:none;">🔄 กู้คืน</button>
+          <button class="btn btn-sm" onclick="permanentDeletePhoto('${esc(ph.id)}')" style="background:#fff;color:#c0392b;border:1px solid #e74c3c;">❌ ลบถาวร</button>
+        </div>`;
+    }
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+async function restorePatient(patientId) {
+  const p = await dbGet('patients', patientId);
+  if (!p) { showToast('ไม่พบข้อมูล'); return; }
+  delete p.deletedAt;
+  await dbPut('patients', p);
+  // กู้ visits + photos ของผู้ป่วยนี้ด้วย (เฉพาะที่ถูกลบพร้อมกัน — soft delete cascade)
+  const visits = await dbGetByIndex('visits', 'patientId', patientId);
+  for (const v of visits) {
+    if (v.deletedAt) { delete v.deletedAt; await dbPut('visits', v); }
+  }
+  const photos = await dbGetByIndex('photos', 'patientId', patientId);
+  for (const ph of photos) {
+    if (ph.deletedAt) { delete ph.deletedAt; await dbPut('photos', ph); }
+  }
+  showToast('✅ กู้คืนสำเร็จ', 'ok');
+  renderTrash();
+}
+
+async function restoreVisit(visitId) {
+  const v = await dbGet('visits', visitId);
+  if (!v) { showToast('ไม่พบข้อมูล'); return; }
+  delete v.deletedAt;
+  await dbPut('visits', v);
+  // กู้รูปของ visit นี้
+  const photos = await dbGetByIndex('photos', 'visitId', visitId);
+  for (const ph of photos) {
+    if (ph.deletedAt) { delete ph.deletedAt; await dbPut('photos', ph); }
+  }
+  showToast('✅ กู้คืน Visit สำเร็จ', 'ok');
+  renderTrash();
+}
+
+function permanentDeletePatient(patientId) {
+  showConfirm(
+    '⚠️ ลบถาวร',
+    'การลบถาวรไม่สามารถกู้คืนได้\nข้อมูลผู้ป่วยและ visit/รูปทั้งหมดจะหายไปเลย\n\nยืนยันลบถาวร?',
+    async () => {
+      const visits = await dbGetByIndex('visits', 'patientId', patientId);
+      const photos = await dbGetByIndex('photos', 'patientId', patientId);
+      for (const ph of photos) await dbDelete('photos', ph.id);
+      for (const v of visits) await dbDelete('visits', v.id);
+      await dbDelete('patients', patientId);
+      showToast('ลบถาวรแล้ว','ok');
+      renderTrash();
+    }
+  );
+}
+
+function permanentDeleteVisit(visitId) {
+  showConfirm(
+    '⚠️ ลบ Visit ถาวร',
+    'การลบถาวรไม่สามารถกู้คืนได้\nVisit นี้และรูปทั้งหมดจะหายไปเลย\n\nยืนยันลบถาวร?',
+    async () => {
+      const photos = await dbGetByIndex('photos', 'visitId', visitId);
+      for (const ph of photos) await dbDelete('photos', ph.id);
+      await dbDelete('visits', visitId);
+      showToast('ลบถาวรแล้ว','ok');
+      renderTrash();
+    }
+  );
+}
+// ────────────────────────────────────────────────────────────────────
+
 
 // ─── UTILS ───────────────────────────────────────────────────────────
 function esc(s) {
@@ -4459,10 +4708,14 @@ function fmtDate(d) {
   if (!d) return '-';
   const dt = new Date(d);
   if (isNaN(dt)) return d;
-  const day   = String(dt.getDate()).padStart(2,'0');
-  const month = String(dt.getMonth()+1).padStart(2,'0');
+  // B11-fix: แยก 2 กรณี —
+  //   date-only string "YYYY-MM-DD" → JS parse เป็น UTC midnight → ใช้ UTC methods (ไม่งั้นขยับ +1 วัน)
+  //   datetime string "...T...Z" หรือ "+07:00" → ใช้ local methods (แสดงเวลาตามไทย)
+  const isDateOnly = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
+  const day   = String(isDateOnly ? dt.getUTCDate()       : dt.getDate()).padStart(2,'0');
+  const month = String(isDateOnly ? dt.getUTCMonth()+1    : dt.getMonth()+1).padStart(2,'0');
   // Guard: ถ้าปีมากกว่า 2400 ถือว่าเป็น พ.ศ. อยู่แล้ว ไม่ต้องบวก 543 อีก
-  const rawYear = dt.getFullYear();
+  const rawYear = isDateOnly ? dt.getUTCFullYear() : dt.getFullYear();
   const year = rawYear > 2400 ? rawYear : rawYear + 543;
   return `${day}/${month}/${year}`;
 }
@@ -4579,7 +4832,7 @@ function toggleDashDetail(i) {
 }
 
 function showDashboard() {
-  showPage('pageDashboard');
+  // Double-render fix: เติม year selector ก่อน showPage เพื่อให้ auto-refresh ใน showPage ใช้ค่าปีที่ถูกต้อง
   const sel = document.getElementById('dashYear');
   const curBE = new Date().getFullYear() + 543;
   if (!sel.options.length) {
@@ -4590,16 +4843,17 @@ function showDashboard() {
       sel.appendChild(opt);
     }
   }
-  renderDashboard();
+  showPage('pageDashboard'); // showPage จะ call renderDashboard() เองแล้ว
 }
 
 async function renderDashboard() {
   const ceYear = parseInt(document.getElementById('dashYear').value);
-  const allVisits = await dbGetAll('visits');
+  // B2-fix: กรองข้อมูลที่ถูกลบออกก่อนนำไปแสดง dashboard
+  const allVisits = (await dbGetAll('visits')).filter(notDeleted);
 
   const yearVisits = allVisits.filter(v => v.date && new Date(v.date).getFullYear() === ceYear);
 
-  const allPatients = await dbGetAll('patients');
+  const allPatients = (await dbGetAll('patients')).filter(notDeleted);
   const patientMap = Object.fromEntries(allPatients.map(p => [p.id, p.name]));
 
   // สรุปรายเดือน
@@ -5189,9 +5443,10 @@ async function renderDashboard() {
 
 // ─── EXPORT / IMPORT ─────────────────────────────────────────────────
 async function exportData() {
+  // B6-fix: กรองข้อมูลที่ถูกลบออกก่อน export — ไม่ให้ข้อมูลขยะติดมาใน backup
   const patients = (await dbGetAll('patients')).filter(notDeleted);
-  const visits   = await dbGetAll('visits');
-  const photos   = await dbGetAll('photos');
+  const visits   = (await dbGetAll('visits')).filter(notDeleted);
+  const photos   = (await dbGetAll('photos')).filter(notDeleted);
   const payload  = { version: 1, exportedAt: new Date().toISOString(), patients, visits, photos };
   const blob     = new Blob([JSON.stringify(payload)], { type: 'application/json' });
   const url      = URL.createObjectURL(blob);
@@ -5440,7 +5695,7 @@ function switchChartTab(tab) {
 }
 
 function showCharts() {
-  showPage('pageCharts');
+  // Double-render fix: เติม year selector ก่อน showPage เพื่อให้ auto-refresh ใน showPage ใช้ค่าปีที่ถูกต้อง
   const sel = document.getElementById('chartYear');
   const curBE = new Date().getFullYear() + 543;
   if (!sel.options.length) {
@@ -5451,13 +5706,14 @@ function showCharts() {
       sel.appendChild(opt);
     }
   }
-  renderCharts();
+  showPage('pageCharts'); // showPage จะ call renderCharts() เองแล้ว
 }
 
 async function renderCharts() {
   if (typeof Chart === 'undefined') return;
   const ceYear = parseInt(document.getElementById('chartYear').value);
-  const allVisits = await dbGetAll('visits');
+  // B2-fix: กรองข้อมูลที่ถูกลบออกก่อนนำไปแสดงกราฟ
+  const allVisits = (await dbGetAll('visits')).filter(notDeleted);
 
   const yearStats = {};
   for (const v of allVisits) {
@@ -6099,8 +6355,7 @@ function _renderProcedure(yearStats, ceYear) {
 
 // ─── OUTCOMES PAGE ──────────────────────────────────────────────────────────
 function showOutcomes() {
-  showPage('pageOutcomes');
-  renderOutcomes();
+  showPage('pageOutcomes'); // showPage จะ call renderOutcomes() เองแล้ว
 }
 
 async function renderOutcomes() {
@@ -6113,8 +6368,9 @@ async function renderOutcomes() {
     ...(showMinor ? [{ label: 'Minor', type: 'minor', color: '#e67e22' }] : []),
   ];
   const minCases = parseInt(document.getElementById('outcomeMinCases').value);
-  const allVisits = await dbGetAll('visits');
-  const allPts    = await dbGetAll('patients');
+  // B2-fix: กรองข้อมูลที่ถูกลบออกก่อนนำไปแสดง outcomes
+  const allVisits = (await dbGetAll('visits')).filter(notDeleted);
+  const allPts    = (await dbGetAll('patients')).filter(notDeleted);
   const ptMap     = new Map(allPts.map(p => [p.id, p]));
 
   // แยก op visits และ fu visits
@@ -6331,7 +6587,7 @@ async function showOutcomesDrillCell(drillId, patientIds) {
     html += `<div style="padding:8px 14px;background:#f8f4fc;border:1px solid #d2b4de;border-radius:8px;cursor:pointer;font-size:13px;"
       onclick="showPatient('${pid}')"
       onmouseover="this.style.background='#ede0f8'" onmouseout="this.style.background='#f8f4fc'">
-      👤 <b>${pt.name}</b>${pt.hn ? ` <span style="font-size:11px;color:var(--text-light);">HN: ${pt.hn}</span>` : ''}
+      👤 <b>${esc(pt.name)}</b>${pt.hn ? ` <span style="font-size:11px;color:var(--text-light);">HN: ${esc(pt.hn)}</span>` : ''}
     </div>`;
   });
   html += `</div>`;
@@ -6364,7 +6620,7 @@ async function showOutcomesDrill(procName, patientIdsByWindow) {
         html += `<div style="padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;"
           onclick="showPatient('${pid}')"
           onmouseover="this.style.color='#6c3483'" onmouseout="this.style.color='inherit'">
-          👤 ${pt.name}${pt.hn ? ` <span style="font-size:11px;color:var(--text-light);">HN: ${pt.hn}</span>` : ''}
+          👤 ${esc(pt.name)}${pt.hn ? ` <span style="font-size:11px;color:var(--text-light);">HN: ${esc(pt.hn)}</span>` : ''}
         </div>`;
       });
     }
@@ -6382,10 +6638,11 @@ async function showOutcomesDrill(procName, patientIdsByWindow) {
 async function exportPatientPDF(patientId) {
   const p = await dbGet('patients', patientId);
   if (!p) return;
-  const visits = (await dbGetByIndex('visits','patientId', patientId)).sort((a,b)=>b.date.localeCompare(a.date));
+  // B7-fix: กรอง visit และรูปที่ถูกลบออกก่อนสร้าง PDF
+  const visits = (await dbGetByIndex('visits','patientId', patientId)).filter(notDeleted).sort((a,b)=>b.date.localeCompare(a.date));
 
   // นับรูปทั้งหมดก่อนเพื่อแสดง progress
-  const allPhotos = await dbGetByIndex('photos', 'patientId', patientId);
+  const allPhotos = (await dbGetByIndex('photos', 'patientId', patientId)).filter(notDeleted);
   const needFetch = allPhotos.filter(ph => !ph.dataUrl && !ph.blob && ph.driveFileId).length;
   let fetchedCount = 0;
   // B5-fix: บอกตอนเริ่มเสมอ + warning ถ้าโหลดนานเกิน 30 วินาที
@@ -6398,7 +6655,8 @@ async function exportPatientPDF(patientId) {
 
   // Build photo rows per visit
   async function getVisitPhotos(vid) {
-    const photos = await dbGetByIndex('photos','visitId', vid);
+    // B7-fix: กรองรูปที่ถูก soft delete ออกด้วย ไม่ให้ติดมาใน PDF
+    const photos = (await dbGetByIndex('photos','visitId', vid)).filter(notDeleted);
     return photos;
   }
 
@@ -6774,6 +7032,22 @@ let _lastSyncAt = localStorage.getItem('lastSyncAt') || null;
 let _syncStatusState = 'idle'; // idle | syncing | error | offline
 let autoSyncEnabled = localStorage.getItem('autoSyncEnabled') === 'true';
 
+// ─── MORE MENU (⚙️ ▾) ────────────────────────────────────────────────
+function toggleMoreMenu() {
+  const menu = document.getElementById('moreMenu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'block';
+}
+function closeMoreMenu() {
+  const menu = document.getElementById('moreMenu');
+  if (menu) menu.style.display = 'none';
+}
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('moreMenuWrap');
+  if (wrap && !wrap.contains(e.target)) closeMoreMenu();
+});
+
 function toggleAutoSync() {
   autoSyncEnabled = !autoSyncEnabled;
   localStorage.setItem('autoSyncEnabled', autoSyncEnabled);
@@ -6828,14 +7102,17 @@ window.addEventListener('offline', () => updateSyncStatus());
 function updateAutoSyncBtn() {
   const btn = document.getElementById('autoSyncToggle');
   if (!btn) return;
+  // ปุ่มอยู่ในเมนูดรอปดาวน์ — แสดงสีและ text ตามสถานะ
   if (autoSyncEnabled) {
-    btn.style.background = 'rgba(39,174,96,.6)';
-    btn.style.borderColor = 'rgba(39,174,96,.8)';
-    btn.textContent = '⚡ Auto: ON';
+    btn.style.background = '#eafaf1';
+    btn.style.color = '#1e8449';
+    btn.style.fontWeight = '600';
+    btn.textContent = '⚡ Auto Sync: ON';
   } else {
-    btn.style.background = 'rgba(255,255,255,.15)';
-    btn.style.borderColor = 'rgba(255,255,255,.3)';
-    btn.textContent = '⚡ Auto';
+    btn.style.background = 'none';
+    btn.style.color = '#2c3e50';
+    btn.style.fontWeight = 'normal';
+    btn.textContent = '⚡ Auto Sync: OFF';
   }
 }
 
@@ -6915,14 +7192,17 @@ function toggleAutoLogin() {
 function updateAutoLoginBtn() {
   const btn = document.getElementById('autoLoginToggle');
   if (!btn) return;
+  // ปุ่มอยู่ในเมนูดรอปดาวน์ — แสดงสีและ text ตามสถานะ
   if (autoLoginEnabled) {
-    btn.style.background = 'rgba(39,174,96,.6)';
-    btn.style.borderColor = 'rgba(39,174,96,.8)';
-    btn.textContent = '🔑 Login: ON';
+    btn.style.background = '#eafaf1';
+    btn.style.color = '#1e8449';
+    btn.style.fontWeight = '600';
+    btn.textContent = '🔑 Auto Login: ON';
   } else {
-    btn.style.background = 'rgba(255,255,255,.15)';
-    btn.style.borderColor = 'rgba(255,255,255,.3)';
-    btn.textContent = '🔑 Login';
+    btn.style.background = 'none';
+    btn.style.color = '#2c3e50';
+    btn.style.fontWeight = 'normal';
+    btn.textContent = '🔑 Auto Login: OFF';
   }
 }
 
@@ -7012,7 +7292,11 @@ async function getOrCreatePhotoFolder() {
     headers: { Authorization: `Bearer ${sheetsAccessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'OPD-Photos', mimeType: 'application/vnd.google-apps.folder' })
   });
+  // B3-fix: เช็ค error ก่อนใช้ผลลัพธ์ — ถ้าไม่เช็ค createData.id จะเป็น undefined
+  if (createResp.status === 401) { sheetsAccessToken = null; throw new Error('Drive token หมดอายุ'); }
+  if (!createResp.ok) throw new Error('Drive: สร้างโฟลเดอร์ไม่สำเร็จ (' + createResp.status + ') — กรุณา Login ใหม่');
   const createData = await createResp.json();
+  if (!createData.id) throw new Error('Drive: ไม่ได้รับ folder ID — กรุณาลอง Sync ใหม่');
   photoDriveFolderId = createData.id;
   return photoDriveFolderId;
 }
@@ -7039,7 +7323,7 @@ async function syncPhotos() {
     showProgress('📸 กำลังเตรียม Sync รูปภาพ...');
     const folderId = await getOrCreatePhotoFolder();
     const listResp = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false&fields=files(id,name)&pageSize=1000`,
+      `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false&fields=files(id,name),nextPageToken&pageSize=1000`,
       { headers: { Authorization: `Bearer ${sheetsAccessToken}` } }
     );
     if (listResp.status === 401) {
@@ -7048,6 +7332,19 @@ async function syncPhotos() {
     }
     if (!listResp.ok) throw new Error('Drive list error: ' + listResp.status);
     const listData = await listResp.json();
+    // B9-fix: รองรับรูปมากกว่า 1,000 รูปด้วย nextPageToken
+    let _syncNextToken = listData.nextPageToken;
+    while (_syncNextToken) {
+      const pageResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false&fields=files(id,name),nextPageToken&pageSize=1000&pageToken=${encodeURIComponent(_syncNextToken)}`,
+        { headers: { Authorization: `Bearer ${sheetsAccessToken}` } }
+      );
+      if (pageResp.status === 401) { sheetsAccessToken = null; throw new Error('Drive token หมดอายุ'); }
+      if (!pageResp.ok) throw new Error('Drive list error (page): ' + pageResp.status);
+      const pageData = await pageResp.json();
+      (listData.files = listData.files || []).push(...(pageData.files || []));
+      _syncNextToken = pageData.nextPageToken;
+    }
     const existingFiles = new Set((listData.files || []).map(f => f.name));
 
     const photos = await new Promise(resolve => {
@@ -7108,11 +7405,27 @@ async function pullPhotos() {
     showProgress('📸 กำลังเตรียมดึงรูปภาพ...');
     const folderId = await getOrCreatePhotoFolder();
     const listResp = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false&fields=files(id,name)&pageSize=1000`,
+      `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false&fields=files(id,name),nextPageToken&pageSize=1000`,
       { headers: { Authorization: `Bearer ${sheetsAccessToken}` } }
     );
+    // B4-fix: เช็ค token หมดอายุก่อน parse — ถ้าไม่เช็คจะได้ error object และบอกว่า "ไม่มีรูป"
+    if (listResp.status === 401) { sheetsAccessToken = null; throw new Error('Drive token หมดอายุ — กรุณา Login ใหม่'); }
+    if (!listResp.ok) throw new Error('Drive list error: ' + listResp.status);
     const listData = await listResp.json();
-    const driveFiles = listData.files || [];
+    // B9-fix: รองรับรูปมากกว่า 1,000 รูปด้วย nextPageToken
+    let driveFiles = listData.files || [];
+    let nextPageToken = listData.nextPageToken;
+    while (nextPageToken) {
+      const pageResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false&fields=files(id,name),nextPageToken&pageSize=1000&pageToken=${encodeURIComponent(nextPageToken)}`,
+        { headers: { Authorization: `Bearer ${sheetsAccessToken}` } }
+      );
+      if (pageResp.status === 401) { sheetsAccessToken = null; throw new Error('Drive token หมดอายุ — กรุณา Login ใหม่'); }
+      if (!pageResp.ok) throw new Error('Drive list error (page): ' + pageResp.status);
+      const pageData = await pageResp.json();
+      driveFiles = driveFiles.concat(pageData.files || []);
+      nextPageToken = pageData.nextPageToken;
+    }
     if (driveFiles.length === 0) { hideProgress(); showToast('ไม่มีรูปใน Drive'); return; }
 
     const total = driveFiles.length;
@@ -7216,7 +7529,7 @@ async function performSheetsSync() {
       throw new Error('Sheets API error: ' + resp.status + ' — ' + respText.slice(0, 200));
     }
     showToast(`✅ Sync ข้อมูลสำเร็จ (${patients.length} pt, ${visits.length} v) กำลัง Sync รูป...`, 'ok');
-    await syncPhotos();
+    // B1-fix: ลบ syncPhotos() ออกจากที่นี่ — performFullSync เรียกอยู่แล้ว ไม่ต้องเรียกซ้ำ
   } catch(e) {
     // Re-throw เพื่อให้ performFullSync จัดการ retry (กรณี 401 token หมดอายุ)
     isSyncing = false;
